@@ -1,0 +1,271 @@
+import { useMemo, useState } from "react";
+
+/**
+ * StackBlitz‑klar demo
+ * – Ingen eksterne UI‑bibliotek
+ * – All logikk samlet i én fil
+ */
+
+const initialTasks = [
+  { id: "kunde", name: "Kundehenvendelser", min: 2, buffer: false },
+  { id: "saker", name: "Saksbehandling", min: 2, buffer: false },
+  { id: "kontroll", name: "Kvalitetskontroll", min: 1, buffer: false },
+  { id: "forbedring", name: "Forbedring / utvikling", min: 0, buffer: true },
+];
+
+const initialEmployees = [
+  { id: "a", name: "Solveig", role: "Teamleder", task: "kunde", absent: false },
+  { id: "b", name: "Kristoffer", role: "Senior", task: "saker", absent: false },
+  { id: "c", name: "Sondre", role: "Fagleder", task: "kontroll", absent: false },
+];
+
+export default function App() {
+  const [tasks] = useState(initialTasks);
+  const [employees, setEmployees] = useState(initialEmployees);
+  const [tab, setTab] = useState("oppgaver");
+  const [showAbsent, setShowAbsent] = useState(false);
+
+  // ---------- BEREGNINGER ----------
+  const perTask = useMemo(() => {
+    return tasks.map((t) => {
+      const available = employees.filter((e) => !e.absent && e.task === t.id);
+      const absent = employees.filter((e) => e.absent && e.task === t.id);
+      const deficit = Math.max(0, t.min - available.length);
+      return { ...t, available, absent, deficit };
+    });
+  }, [tasks, employees]);
+
+  // ---------- HANDLERS ----------
+  function toggleAbsent(id) {
+    setEmployees((prev) => prev.map((e) => (e.id === id ? { ...e, absent: !e.absent } : e)));
+  }
+
+  function setTask(empId, taskId) {
+    setEmployees((prev) => prev.map((e) => (e.id === empId ? { ...e, task: taskId } : e)));
+  }
+
+  function autoBalance() {
+    // Enkel auto-balansering: flytter fra buffer-oppgaver til oppgaver som mangler bemanning
+    setEmployees((prev) => {
+      const next = prev.map((e) => ({ ...e }));
+
+      const taskById = new Map(tasks.map((t) => [t.id, t]));
+      const countAvailable = (taskId) => next.filter((e) => !e.absent && e.task === taskId).length;
+
+      // Finn oppgaver med mangel
+      const deficits = tasks
+        .map((t) => ({ id: t.id, need: Math.max(0, t.min - countAvailable(t.id)) }))
+        .filter((x) => x.need > 0)
+        .sort((a, b) => b.need - a.need);
+
+      for (const d of deficits) {
+        let need = d.need;
+        while (need > 0) {
+          const donor = next.find((e) => {
+            if (e.absent) return false;
+            const tt = taskById.get(e.task);
+            return tt?.buffer === true;
+          });
+          if (!donor) break;
+          donor.task = d.id;
+          need -= 1;
+        }
+      }
+
+      return next;
+    });
+  }
+
+  // ---------- UI ----------
+  const btn = {
+    padding: "8px 10px",
+    border: "1px solid #cbd5e1",
+    borderRadius: 10,
+    background: "white",
+    cursor: "pointer",
+  };
+
+  const btnActive = {
+    ...btn,
+    background: "#e2e8f0",
+    borderColor: "#94a3b8",
+    fontWeight: 600,
+  };
+
+  const card = {
+    border: "1px solid #e2e8f0",
+    borderRadius: 16,
+    padding: 14,
+    background: "white",
+    boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+  };
+
+  return (
+    <div style={{ fontFamily: "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto", padding: 20, background: "#f8fafc", minHeight: "100vh" }}>
+      <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+        <h2 style={{ margin: 0 }}>Oppgave‑ og bemanningsoversikt (Demo)</h2>
+        <p style={{ marginTop: 6, color: "#475569" }}>
+          Nettleser-demo (StackBlitz-klar). Funksjoner: oppgaver, ansatte, fravær, auto-balansering og visningen “Oppgaver → Ansatte”.
+        </p>
+
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", margin: "14px 0 18px" }}>
+          <button style={tab === "oppgaver" ? btnActive : btn} onClick={() => setTab("oppgaver")}>Oppgaver</button>
+          <button style={tab === "oppgavevisning" ? btnActive : btn} onClick={() => setTab("oppgavevisning")}>Oppgaver → Ansatte</button>
+          <button style={tab === "ansatte" ? btnActive : btn} onClick={() => setTab("ansatte")}>Ansatte</button>
+          <button style={{ ...btn, background: "#16a34a", color: "white", borderColor: "#16a34a" }} onClick={autoBalance}>Auto‑balanser</button>
+        </div>
+
+        {/* -------- OPPGAVER -------- */}
+        {tab === "oppgaver" && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 12 }}>
+            {perTask.map((t) => (
+              <div key={t.id} style={card}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
+                  <div>
+                    <div style={{ fontWeight: 700 }}>{t.name} {t.buffer && <span style={{ fontWeight: 600, color: "#64748b" }}>(buffer)</span>}</div>
+                    <div style={{ marginTop: 4, color: "#475569" }}>
+                      Tilgjengelige: <strong>{t.available.length}</strong> / Min: <strong>{t.min}</strong>
+                    </div>
+                  </div>
+                  {t.deficit > 0 ? (
+                    <span style={{ padding: "6px 10px", borderRadius: 999, background: "#fee2e2", color: "#991b1b", fontWeight: 700 }}>
+                      Mangler {t.deficit}
+                    </span>
+                  ) : (
+                    <span style={{ padding: "6px 10px", borderRadius: 999, background: "#dcfce7", color: "#166534", fontWeight: 700 }}>
+                      OK
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* -------- OPPGAVER → ANSATTE -------- */}
+        {tab === "oppgavevisning" && (
+          <div>
+            <div style={{ ...card, display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <div style={{ fontWeight: 700 }}>Oppgaver → Hvem sitter hvor</div>
+              <label style={{ display: "flex", alignItems: "center", gap: 10, color: "#334155" }}>
+                <span>Vis fravær</span>
+                <input type="checkbox" checked={showAbsent} onChange={() => setShowAbsent((v) => !v)} />
+              </label>
+            </div>
+
+            {perTask.map((t) => {
+              const list = showAbsent ? [...t.available, ...t.absent] : t.available;
+              return (
+                <div key={t.id} style={{ ...card, marginBottom: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+                    <div>
+                      <div style={{ fontWeight: 800 }}>{t.name} {t.buffer && <span style={{ fontWeight: 600, color: "#64748b" }}>(buffer)</span>}</div>
+                      <div style={{ marginTop: 4, color: "#475569" }}>
+                        Tilgjengelige: <strong>{t.available.length}</strong> / Min: <strong>{t.min}</strong>
+                        {showAbsent && t.absent.length > 0 ? (
+                          <span style={{ marginLeft: 10, color: "#64748b" }}>(+{t.absent.length} fravær)</span>
+                        ) : null}
+                      </div>
+                    </div>
+                    {t.deficit > 0 ? (
+                      <span style={{ padding: "6px 10px", borderRadius: 999, background: "#fee2e2", color: "#991b1b", fontWeight: 700 }}>
+                        Mangler {t.deficit}
+                      </span>
+                    ) : (
+                      <span style={{ padding: "6px 10px", borderRadius: 999, background: "#dcfce7", color: "#166534", fontWeight: 700 }}>
+                        OK
+                      </span>
+                    )}
+                  </div>
+
+                  <div style={{ height: 1, background: "#e2e8f0", margin: "12px 0" }} />
+
+                  {list.length === 0 ? (
+                    <div style={{ color: "#64748b" }}>Ingen ansatte på denne oppgaven akkurat nå.</div>
+                  ) : (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                      {list.map((e) => (
+                        <span
+                          key={e.id}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 8,
+                            padding: "6px 10px",
+                            borderRadius: 999,
+                            border: "1px solid #cbd5e1",
+                            background: e.absent ? "#f1f5f9" : "#ffffff",
+                            color: e.absent ? "#64748b" : "#0f172a",
+                          }}
+                        >
+                          <span style={{ fontWeight: 700 }}>{e.name}</span>
+                          <span style={{ fontSize: 12, color: "#64748b" }}>({e.role})</span>
+                          {e.absent ? (
+                            <span style={{ fontSize: 12, padding: "2px 8px", borderRadius: 999, background: "#64748b", color: "white", fontWeight: 700 }}>
+                              Fravær
+                            </span>
+                          ) : null}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            <div style={{ color: "#64748b", fontSize: 12 }}>
+              Bemanningskrav og “mangler” beregnes på tilgjengelige ansatte. Toggle kan vise fraværende i listen (grå).
+            </div>
+          </div>
+        )}
+
+        {/* -------- ANSATTE -------- */}
+        {tab === "ansatte" && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 12 }}>
+            {employees.map((e) => (
+              <div key={e.id} style={card}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+                  <div>
+                    <div style={{ fontWeight: 800 }}>{e.name}</div>
+                    <div style={{ marginTop: 4, color: "#64748b" }}>{e.role}</div>
+                  </div>
+                  {e.absent ? (
+                    <span style={{ fontSize: 12, padding: "4px 10px", borderRadius: 999, background: "#64748b", color: "white", fontWeight: 700 }}>
+                      Fravær
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: 12, padding: "4px 10px", borderRadius: 999, background: "#dcfce7", color: "#166534", fontWeight: 800 }}>
+                      Tilgjengelig
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ height: 1, background: "#e2e8f0", margin: "12px 0" }} />
+
+                <label style={{ display: "flex", flexDirection: "column", gap: 6, color: "#334155" }}>
+                  <span style={{ fontSize: 12, color: "#64748b" }}>Oppgave</span>
+                  <select value={e.task} onChange={(x) => setTask(e.id, x.target.value)} style={{ padding: 8, borderRadius: 10, border: "1px solid #cbd5e1" }}>
+                    {tasks.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, color: "#334155" }}>
+                  <input type="checkbox" checked={e.absent} onChange={() => toggleAbsent(e.id)} />
+                  <span>Fravær</span>
+                </label>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{ marginTop: 18, color: "#94a3b8", fontSize: 12 }}>
+          Tips: Bruk “Auto-balanser” etter at du markerer fravær for å flytte folk fra buffer-oppgaver til oppgaver med minimumskrav.
+        </div>
+      </div>
+    </div>
+  );
+}
